@@ -1,0 +1,8 @@
+google-ads-mcp
+Copyright 2026 Walma AI
+
+This product includes material derived from google-ads-mcp
+(https://github.com/googleads/google-ads-mcp),
+Copyright Google LLC, licensed under the Apache License, Version 2.0:
+the tool names, argument contracts, tool descriptions and the list of
+queryable resources. The implementation is an independent TypeScript rewrite.

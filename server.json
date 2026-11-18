@@ -1,0 +1,46 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json",
+  "name": "io.github.walma-labs/google-ads-mcp",
+  "description": "Read-only Google Ads MCP server with service-account auth: GAQL search, field metadata and accessible accounts.",
+  "repository": {
+    "url": "https://github.com/Walma-Labs/google-ads-mcp",
+    "source": "github"
+  },
+  "version": "0.2.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "@walma-labs/google-ads-mcp",
+      "version": "0.2.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "GOOGLE_ADS_SERVICE_ACCOUNT_FILE",
+          "description": "Path to the Google service-account JSON key (or set GOOGLE_ADS_SERVICE_ACCOUNT_JSON with the key inline)",
+          "isRequired": false,
+          "isSecret": true
+        },
+        {
+          "name": "GOOGLE_ADS_SERVICE_ACCOUNT_JSON",
+          "description": "The service-account key as inline JSON (alternative to the file path)",
+          "isRequired": false,
+          "isSecret": true
+        },
+        {
+          "name": "GOOGLE_ADS_DEVELOPER_TOKEN",
+          "description": "Google Ads API developer token, from the API Center of a manager account",
+          "isRequired": true,
+          "isSecret": true
+        },
+        {
+          "name": "GOOGLE_ADS_LOGIN_CUSTOMER_ID",
+          "description": "Manager account to act through, when the service account reaches the ad accounts via a manager",
+          "isRequired": false,
+          "isSecret": false
+        }
+      ]
+    }
+  ]
+}
