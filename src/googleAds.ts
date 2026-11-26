@@ -8,6 +8,7 @@
 //   GOOGLE_ADS_SERVICE_ACCOUNT_FILE  path to the key file (local / CLI path)
 //   GOOGLE_ADS_DEVELOPER_TOKEN       required by every Google Ads API call
 //   GOOGLE_ADS_LOGIN_CUSTOMER_ID     optional manager account to act through
+//   GOOGLE_ADS_LOCK_LOGIN_CUSTOMER_ID  optional: "1" fences the server to that manager (see below)
 //   GOOGLE_ADS_API_VERSION           optional, default below
 //
 //   GOOGLE_ADS_WRITE_TOOLS           optional: "draft" (or "1") or "live". Off when unset.
@@ -65,6 +66,14 @@ export interface GoogleAdsClient {
 export interface GoogleAdsClientOptions {
   developerToken?: string;
   loginCustomerId?: string;
+  /**
+   * Fence the client to `loginCustomerId` and the accounts under it. Every call
+   * then goes through that manager, a caller cannot name another one, and only
+   * that manager is listed as accessible. Google refuses a customer that is not
+   * under the login manager, so whatever else the service account was added to
+   * stays out of reach. Defaults to GOOGLE_ADS_LOCK_LOGIN_CUSTOMER_ID.
+   */
+  lockLoginCustomer?: boolean;
   apiVersion?: string;
 }
 
@@ -113,12 +122,25 @@ export function createGoogleAdsClient(
   // Read at call time, not at construction: the chassis puts secrets in the
   // environment before the first request, and a missing token should be a clear
   // error on the tool call rather than a crash at import.
+  const configuredLogin = (): string =>
+    cleanCustomerId(options.loginCustomerId ?? process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID ?? "");
+  const locked = (): boolean =>
+    options.lockLoginCustomer ?? /^(1|true)$/i.test((process.env.GOOGLE_ADS_LOCK_LOGIN_CUSTOMER_ID ?? "").trim());
+
   const headers = (loginCustomerId?: string): Record<string, string> => {
     const token = options.developerToken ?? process.env.GOOGLE_ADS_DEVELOPER_TOKEN;
     if (!token) throw new Error("GOOGLE_ADS_DEVELOPER_TOKEN is not set");
-    const login = cleanCustomerId(
-      loginCustomerId ?? options.loginCustomerId ?? process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID ?? "",
-    );
+    const configured = configuredLogin();
+    if (locked()) {
+      // Fail closed: a lock without a manager would fence nothing.
+      if (!configured) throw new Error("GOOGLE_ADS_LOCK_LOGIN_CUSTOMER_ID is set but GOOGLE_ADS_LOGIN_CUSTOMER_ID is not");
+      const asked = loginCustomerId ? cleanCustomerId(loginCustomerId) : "";
+      if (asked && asked !== configured) {
+        throw new Error(`This server only works through manager account ${configured}. Leave login_customer_id out.`);
+      }
+      return { "developer-token": token, "login-customer-id": configured };
+    }
+    const login = loginCustomerId ? cleanCustomerId(loginCustomerId) : configured;
     return login ? { "developer-token": token, "login-customer-id": login } : { "developer-token": token };
   };
 
@@ -127,7 +149,9 @@ export function createGoogleAdsClient(
       const { data } = await request({
         url: `${base}/customers:listAccessibleCustomers`, method: "GET", headers: headers(),
       });
-      return ((data?.resourceNames ?? []) as string[]).map(n => n.replace(/^customers\//, ""));
+      const ids = ((data?.resourceNames ?? []) as string[]).map(n => n.replace(/^customers\//, ""));
+      // Locked: the service account may reach other accounts directly; they are not this server's.
+      return locked() ? ids.filter(id => id === configuredLogin()) : ids;
     },
 
     async search(customerId, query, loginCustomerId) {

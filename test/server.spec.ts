@@ -10,7 +10,7 @@ import { createGoogleAdsClient, type RequestFn } from "../src/googleAds.js";
 
 type Call = Parameters<RequestFn>[0];
 
-function fixture(respond: (call: Call) => unknown, options = { developerToken: "dev-token" } as Record<string, string>) {
+function fixture(respond: (call: Call) => unknown, options: Record<string, string | boolean> = { developerToken: "dev-token" }) {
   const calls: Call[] = [];
   const request: RequestFn = async (call) => {
     calls.push(call);
@@ -86,6 +86,51 @@ describe("google-ads MCP server", () => {
     const mcp = await connect(client);
     await mcp.callTool({ name: "search", arguments: { customer_id: 1, fields: ["campaign.id"], resource: "campaign" } });
     expect(calls[0]!.headers).toEqual({ "developer-token": "dev-token", "login-customer-id": "1112223333" });
+  });
+
+  describe("locked to one manager account", () => {
+    const lockedTo = { developerToken: "dev-token", loginCustomerId: "111-222-3333", lockLoginCustomer: true };
+
+    it("lists only that manager, whatever else the service account reaches", async () => {
+      const { client } = fixture(() => ({ resourceNames: ["customers/1112223333", "customers/9998887777"] }), lockedTo);
+      const mcp = await connect(client);
+      expect(parse(await mcp.callTool({ name: "list_accessible_customers", arguments: {} }))).toEqual(["1112223333"]);
+    });
+
+    it("always goes through that manager", async () => {
+      const { client, calls } = fixture(() => ({ results: [] }), lockedTo);
+      const mcp = await connect(client);
+      await mcp.callTool({ name: "search", arguments: { customer_id: 5, fields: ["campaign.id"], resource: "campaign" } });
+      await mcp.callTool({ name: "search", arguments: { customer_id: 5, fields: ["campaign.id"], resource: "campaign", login_customer_id: "111-222-3333" } });
+      expect(calls.map(c => c.headers!["login-customer-id"])).toEqual(["1112223333", "1112223333"]);
+    });
+
+    it("refuses another login account without calling Google", async () => {
+      const { client, calls } = fixture(() => ({ results: [] }), lockedTo);
+      const mcp = await connect(client);
+      const res: any = await mcp.callTool({ name: "search", arguments: {
+        customer_id: "9998887777", fields: ["campaign.id"], resource: "campaign", login_customer_id: "9998887777",
+      } });
+      expect(res.isError).toBe(true);
+      expect(text(res)).toContain("1112223333");
+      expect(calls).toHaveLength(0);
+    });
+
+    it("refuses every call when no manager is configured", async () => {
+      const { client, calls } = fixture(() => ({ results: [] }), { developerToken: "dev-token", loginCustomerId: "", lockLoginCustomer: true });
+      const mcp = await connect(client);
+      const res: any = await mcp.callTool({ name: "search", arguments: { customer_id: 5, fields: ["campaign.id"], resource: "campaign" } });
+      expect(res.isError).toBe(true);
+      expect(calls).toHaveLength(0);
+    });
+
+    it("mutate is fenced the same way", async () => {
+      const { client, calls } = fixture(() => ({}), lockedTo);
+      await expect(client.mutate("5", [], { loginCustomerId: "9998887777" })).rejects.toThrow("1112223333");
+      await client.mutate("5", [], { validateOnly: true });
+      expect(calls).toHaveLength(1);
+      expect(calls[0]!.headers!["login-customer-id"]).toBe("1112223333");
+    });
   });
 
   it("get_resource_metadata merges attributes with compatible metrics and segments, following pages", async () => {

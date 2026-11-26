@@ -107,6 +107,7 @@ claude mcp add google-ads --scope user \
 | `GOOGLE_ADS_SERVICE_ACCOUNT_JSON` | The key as inline JSON. Wins over the file when both are set |
 | `GOOGLE_ADS_DEVELOPER_TOKEN` | Required |
 | `GOOGLE_ADS_LOGIN_CUSTOMER_ID` | Optional manager account. A tool call can also pass `login_customer_id` |
+| `GOOGLE_ADS_LOCK_LOGIN_CUSTOMER_ID` | Optional. `1` fences the server to `GOOGLE_ADS_LOGIN_CUSTOMER_ID` and the accounts under it: every call goes through that manager, a tool call cannot name another, and only that manager is listed as accessible. Set it whenever the service account can reach accounts this server should not serve |
 | `GOOGLE_ADS_WRITE_TOOLS` | Optional: `draft` or `live`. See [Writing](#writing) |
 | `GOOGLE_ADS_API_VERSION` | Optional, default `v25`. Google retires a version about a year after its release |
 
